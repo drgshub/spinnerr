@@ -12,24 +12,42 @@ const config = JSON.parse(fs.readFileSync("/app/config/config.json"));
 const PORT = process.env.PORT || config.port
 let containers = config.containers;
 
-const DOCKER_PROXY_URL = process.env.DOCKER_PROXY_URL || null;
-const HAS_SOCKET = fs.existsSync("/var/run/docker.sock");
-
 const lastActivity = {};
 containers.forEach(c => lastActivity[c.name] = Date.now());
 
 
-//---------------------------------------------------
+//----------------------------------------------------------------
 // Log function
-//---------------------------------------------------
-function log(message, method) {
+//----------------------------------------------------------------
+function log(message) {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] [${method}] ${message}`);
+  console.log(`[${timestamp}] ${message}`);
 }
 
-//---------------------------------------------------
-// Check container status function
-//---------------------------------------------------
+
+//----------------------------------------------------------------
+// Check if Proxy or Socket
+//----------------------------------------------------------------
+const DOCKER_PROXY_URL = process.env.DOCKER_PROXY_URL || null;
+const HAS_SOCKET = fs.existsSync("/var/run/docker.sock");
+let method;
+
+if(HAS_SOCKET){
+  method = "socket";
+  log(`Using SOCKET`);
+} else if(DOCKER_PROXY_URL){
+  method = "proxy";
+  log(`Using PROXY`);
+} else if (HAS_SOCKET && DOCKER_PROXY_URL){
+  log(`Both methods defined, please choose between docker socket or docker proxy`)
+} else {
+  log(`No socket or proxy found, please mount the docker socket or define a docker proxy`)
+}
+
+
+//----------------------------------------------------------------
+// Check if container is running
+//----------------------------------------------------------------
 function isContainerRunning(name) {
   if (HAS_SOCKET) {
     try {
@@ -49,39 +67,97 @@ function isContainerRunning(name) {
   return false;
 }
 
-//---------------------------------------------------
+
+//----------------------------------------------------------------
+// Determine container start time in order to prevent stopping earlier if container was started manually
+//----------------------------------------------------------------
+let logOnce = true;
+function checkStartTime(name, idleTimeout){
+  
+  const now = Date.now();
+  let startTimeStr;
+
+  if (HAS_SOCKET) {
+    try {
+      startTimeStr = execSync(`docker inspect -f '{{.State.StartedAt}}' ${name}`).toString().trim();
+    } catch(e) {
+      console.error('Error checking container via socket:', e.message);
+      return false;
+    }
+  } else if (DOCKER_PROXY_URL) {
+    try {
+      const res = execSync(`curl -s ${DOCKER_PROXY_URL.replace("tcp://", "http://")}/containers/${name}/json`).toString().trim();
+      const containerInfo = JSON.parse(res);
+      startTimeStr = containerInfo.State.StartedAt;
+    } catch(e) {
+      console.error('Error checking container via proxy:', e.message);
+      return false;
+    }
+  } else {
+    return false;
+  }
+
+  try {
+    const startTime = new Date(startTimeStr).getTime();
+    
+    if (logOnce){
+      log(`<${name}> timeout reached from last web request, checking for timeout from START time`);
+      if (!(now - startTime > idleTimeout * 1000)){
+        log(`<${name}> timeout not reached, will stop once timeout reaches ${idleTimeout} seconds`);
+      }
+    }
+
+    logOnce = false;
+
+    return (now - startTime > idleTimeout * 1000);
+  } catch(e){
+    console.error('Error checking container start time:', e.message);
+    return false;
+  }
+}
+
+
+//----------------------------------------------------------------
 // Start container function
-//---------------------------------------------------
+//----------------------------------------------------------------
 function startContainer(name) {
   if (!isContainerRunning(name)) {
     try {
-      if (HAS_SOCKET) execSync(`docker start ${name}`, { stdio: "ignore" });
-      else if (DOCKER_PROXY_URL) execSync(`curl -s -X POST ${DOCKER_PROXY_URL.replace("tcp://", "http://")}/containers/${name}/start`);
-      log(`Started container <${name}>`);
+      if (HAS_SOCKET){
+        execSync(`docker start ${name}`, { stdio: "ignore" });
+      } else if (DOCKER_PROXY_URL){
+        execSync(`curl -s -X POST ${DOCKER_PROXY_URL.replace("tcp://", "http://")}/containers/${name}/start`);
+      }
+      log(`<${name}> started`);
     } catch (e) {
-      log(`Failed to start ${name}:`, e.message);
+      log(`Failed to start ${name}: ${e.message}`);
     }
   }
 }
 
-//---------------------------------------------------
+
+//----------------------------------------------------------------
 // Stop container function
-//---------------------------------------------------
+//----------------------------------------------------------------
 function stopContainer(name) {
   if (isContainerRunning(name)) {
     try {
-      log(`Stopping container <${name}>`);
-      if (HAS_SOCKET) execSync(`docker stop ${name}`, { stdio: "ignore" });
-      else if (DOCKER_PROXY_URL) execSync(`curl -s -X POST ${DOCKER_PROXY_URL.replace("tcp://", "http://")}/containers/${name}/stop`);
+      log(`<${name}> stopping..`);
+      if (HAS_SOCKET){
+        execSync(`docker stop ${name}`, { stdio: "ignore" });
+      } else if (DOCKER_PROXY_URL){
+        execSync(`curl -s -X POST ${DOCKER_PROXY_URL.replace("tcp://", "http://")}/containers/${name}/stop`);
+      }
     } catch (e) {
-      log(`Failed to stop ${name}:`, e.message);
+      log(`Failed to stop ${name}: ${e.message}`);
     }
   }
 }
 
-//---------------------------------------------------
-// Expose control functions for backend
-//---------------------------------------------------
+
+//----------------------------------------------------------------
+// Expose control functions for backend and UI
+//----------------------------------------------------------------
 app.use(express.json());
 app.use("/api/containers", containerRoutes);
 
@@ -90,30 +166,35 @@ app.locals.stopContainer = stopContainer;
 app.locals.isContainerRunning = isContainerRunning;
 app.locals.lastActivity = lastActivity;
 
-//---------------------------------------------------
-// Web UI
-//---------------------------------------------------
-const UI_PORT = process.env.UI_PORT || 11000;
+
+//----------------------------------------------------------------
+// Web UI server
+//----------------------------------------------------------------
+const UI_PORT = process.env.UI_PORT || null;
 
 const ui = express();
 ui.use(express.json());                     // keep JSON parsing
 ui.use("/api/containers", containerRoutes); // container API routes
 ui.use(express.static("/app/public/ui"));  // serve HTML/CSS/JS
 
+// Expose container control utilities to UI routes
+
 ui.locals.isContainerRunning = isContainerRunning;
 ui.locals.startContainer = startContainer;
 ui.locals.stopContainer = stopContainer;
 ui.locals.lastActivity = lastActivity;
 
-// Start UI server
-ui.listen(UI_PORT, () => {
-  log(`UI running on port ${UI_PORT}`);
-});
+// Start UI server if defined
+if (UI_PORT){ 
+  ui.listen(UI_PORT, () => {
+    log(`WebUI running on port ${UI_PORT}`);
+  });
+}
 
 
-//---------------------------------------------------
+//----------------------------------------------------------------
 // Main proxy middleware
-//---------------------------------------------------
+//----------------------------------------------------------------
 app.use(async (req, res, next) => {
   const container = containers.find(c => c.host === req.hostname);
   if (!container) return res.status(404).send("Container not found");
@@ -140,13 +221,11 @@ app.use(async (req, res, next) => {
 });
 
 
-//---------------------------------------------------
+//----------------------------------------------------------------
 // Tracking the timeout
-//---------------------------------------------------
-
+//----------------------------------------------------------------
 const lastLog = {}; // track last log time per container
 
-// Updated timeout for accessed endpoint, if accessed
 proxy.on('proxyRes', (proxyRes, req) => {
   const container = containers.find(c => c.host === req.hostname);
   if (!container) return;
@@ -155,27 +234,30 @@ proxy.on('proxyRes', (proxyRes, req) => {
 
   const now = Date.now();
   if (!lastLog[container.name] || now - lastLog[container.name] > 5000) { // 5000 ms = 5 sec
-    log(`${container.name} accessed on ${new Date(lastActivity[container.name]).toISOString()}, timeout reset`);
+    log(`<${container.name}> accessed on ${new Date(lastActivity[container.name]).toISOString()}, timeout reset`);
     lastLog[container.name] = now;
   }
 });
 
-//---------------------------------------------------
-// Stop container after timeout
-//---------------------------------------------------
+
+//----------------------------------------------------------------
+// Check every 5 seconds if timeout has been reached
+//----------------------------------------------------------------
 setInterval(() => {
   const now = Date.now();
   containers.forEach(c => {
-    if (c.active && now - lastActivity[c.name] > (c.idleTimeout || 60) * 1000 && isContainerRunning(c.name)) {
+    if (c.active && now - lastActivity[c.name] > (c.idleTimeout || 60) * 1000 && isContainerRunning(c.name) && checkStartTime(c.name, c.idleTimeout)) {
+      log(`<${c.name}> ${(c.idleTimeout || 60)} seconds timeout reached`);
       stopContainer(c.name);
-      log(`Container <${c.name}> stopped, timeout=${(c.idleTimeout || 60)} seconds`)
+      log(`<${c.name}> stopped successfully`);
+      logOnce = true;
     }
   });
 }, 5000);
 
-//---------------------------------------------------
+//----------------------------------------------------------------
 // Reload configuration function
-//---------------------------------------------------
+//----------------------------------------------------------------
 function reloadConfig() {
   try {
     const newConfig = JSON.parse(fs.readFileSync("/app/config/config.json"));
@@ -190,26 +272,21 @@ function reloadConfig() {
     containers = newConfig.containers;
     log("Config reloaded, containers updated");
   } catch (e) {
-    log("Failed to reload config:", e.message);
+    log(`Failed to reload config: ${e.message}`);
   }
 }
 
-//---------------------------------------------------
-// Reload config when changed
-//---------------------------------------------------
-//fs.watch("/app/config/config.json", (eventType, filename) => {
-//  if (eventType === "change") {
-//    reloadConfig();
-//  }
-//});
+//----------------------------------------------------------------
+// Reload configuration if config.json has been changed
+//----------------------------------------------------------------
 
 fs.watchFile("/app/config/config.json", { interval: 500 }, () => {
   reloadConfig();
 });
 
-//---------------------------------------------------
+//----------------------------------------------------------------
 // Main app, starts the app listening on the defined port
-//---------------------------------------------------
+//----------------------------------------------------------------
 app.listen(PORT, () => {
-  console.log(`[${new Date().toISOString()}] [${HAS_SOCKET ? 'socket' : 'proxy'}] Spinnerr running on port ${PORT}`);
+  log(`Spinnerr Proxy running on port ${PORT}`);
 });
