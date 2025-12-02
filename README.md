@@ -195,3 +195,8 @@ Variable | Usage
 PORT | Port of the reverse proxy
 UI_PORT | Port of the Web UI
 DOCKER_PROXY_URL | Address of the socket proxy, must start with tcp://
+
+## License
+
+Spinnerr is licensed under the [Apache License 2.0](./LICENSE).  
+See the LICENSE file for details.
