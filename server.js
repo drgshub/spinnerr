@@ -8,7 +8,7 @@ import groupRoutes from "./routes/groupRoutes.js";
 
 
 const app = express();
-const proxy = httpProxy.createProxyServer({});
+///const proxy = httpProxy.createProxyServer({});
 const waitingPage = path.join("/app/public", "waiting.html");
 const config = JSON.parse(fs.readFileSync("/app/config/config.json"));
 const PORT = process.env.PORT || config.port
@@ -17,6 +17,19 @@ let groups = config.groups;
 
 const lastActivity = {};
 containers.forEach(c => lastActivity[c.name] = Date.now());
+
+const proxy = httpProxy.createProxyServer({
+  ws: true,
+  changeOrigin: true
+});
+
+// WebSocket fix
+proxy.on("proxyReq", (proxyReq, req, res) => {
+  if (req.headers.upgrade) {
+    proxyReq.setHeader("Connection", "Upgrade");
+    proxyReq.setHeader("Upgrade", req.headers.upgrade);
+  }
+});
 
 
 //----------------------------------------------------------------
@@ -216,10 +229,11 @@ function stopContainer(name) {
 //----------------------------------------------------------------
 // Expose control functions for backend and UI
 //----------------------------------------------------------------
-app.use(express.json());
-app.use("/api/containers", containerRoutes);
-app.use("/api/groups", groupRoutes);
-
+//app.use(express.json());
+//app.use("/api/containers", containerRoutes);
+//app.use("/api/groups", groupRoutes);
+app.use("/api/containers", express.json(), containerRoutes);
+app.use("/api/groups", express.json(), groupRoutes);
 app.locals.startContainer = startContainer;
 app.locals.stopContainer = stopContainer;
 app.locals.isContainerRunning = isContainerRunning;
@@ -257,6 +271,7 @@ if (UI_PORT){
 //----------------------------------------------------------------
 app.use(async (req, res, next) => {
   const container = containers.find(c => c.host === req.hostname);
+  
   if (!container) return res.status(404).send("Container not found");
 
   // Update the timestamp when the container was last accessed via web requests
@@ -416,6 +431,17 @@ fs.watchFile("/app/config/config.json", { interval: 500 }, () => {
 //----------------------------------------------------------------
 // Main app, starts the app listening on the defined port
 //----------------------------------------------------------------
-app.listen(PORT, () => {
+//app.listen(PORT, () => {
+//  log(`Spinnerr Proxy running on port ${PORT}`);
+//});
+
+const server = app.listen(PORT, () => {
   log(`Spinnerr Proxy running on port ${PORT}`);
 });
+
+server.on("upgrade", (req, socket, head) => {
+  const container = containers.find(c => c.host === req.headers.host);
+  if (!container) return socket.destroy();
+  proxy.ws(req, socket, head, { target: container.url, ws: true, changeOrigin: true, xfwd: true });
+});
+
