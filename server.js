@@ -1,5 +1,5 @@
 import express from "express";
-import { execSync } from "child_process";
+import { execSync, exec } from "child_process";
 import httpProxy from "http-proxy";
 import path from "path";
 import fs from "fs";
@@ -7,9 +7,32 @@ import containerRoutes from "./routes/containerRoutes.js";
 import groupRoutes from "./routes/groupRoutes.js";
 
 const app = express();
-///const proxy = httpProxy.createProxyServer({});
 const waitingPage = path.join("/app/public", "waiting.html");
-const config = JSON.parse(fs.readFileSync("/app/config/config.json"));
+
+//----------------------------------------------------------------
+// Load configuration or create default if not exists
+//----------------------------------------------------------------
+const CONFIG_PATH = "/app/config/config.json";
+let config;
+
+if (!fs.existsSync(CONFIG_PATH)) {
+  // create default config
+  const defaultConfig = {
+    port: 3000,
+    containers: [],
+    groups: []
+  };
+  fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
+  config = defaultConfig;
+  log("No config.json found — created default config");
+} else {
+  config = JSON.parse(fs.readFileSync(CONFIG_PATH));
+}
+
+//----------------------------------------------------------------
+// Initialize variables
+//----------------------------------------------------------------
 const PORT = process.env.PORT || config.port
 let containers = config.containers;
 let groups = config.groups;
@@ -21,7 +44,6 @@ containers.forEach(c => lastActivity[c.name] = Date.now());
 //----------------------------------------------------------------
 // Create proxy server
 //----------------------------------------------------------------
-
 const proxy = httpProxy.createProxyServer({
   ws: true,
   changeOrigin: false
@@ -34,6 +56,20 @@ proxy.on("proxyReq", (proxyReq, req, res) => {
     proxyReq.setHeader("Upgrade", req.headers.upgrade);
   }
 });
+
+// Proxy error handling
+proxy.on("error", (err, req, res) => {
+  const container = containers.find(c => c.host === req.hostname);
+  if (container) {
+    log(`<${container.name}> proxy error: ${err.code || err.message}`);
+  }
+
+  // If headers are not sent yet, serve the waiting page
+  if (!res.headersSent) {
+    res.status(502).sendFile(waitingPage);
+  }
+});
+
 
 //----------------------------------------------------------------
 // Log function
@@ -232,9 +268,6 @@ function stopContainer(name) {
 //----------------------------------------------------------------
 // Expose control functions for backend and UI
 //----------------------------------------------------------------
-//app.use(express.json());
-//app.use("/api/containers", containerRoutes);
-//app.use("/api/groups", groupRoutes);
 app.use("/api/containers", express.json(), containerRoutes);
 app.use("/api/groups", express.json(), groupRoutes);
 app.locals.startContainer = startContainer;
@@ -315,13 +348,21 @@ app.use(async (req, res, next) => {
     }
   }
 
+  
   // If the service endpoint is reachable, serve the webpage; else serve the waiting page until ready
   try {
     const r = await fetch(`${container.url}/health`, { method: "GET" });
     if (r.ok) {
+      // healthy → proxy
       return proxy.web(req, res, { target: container.url, secure: false, changeOrigin: false });
+    } else if (r.status === 502) {
+      // 502 → container not ready, serve waiting page
+      return res.sendFile(waitingPage);
     }
-  } catch {}
+  } catch (e) {
+    // fetch failed → container not ready
+    return res.sendFile(waitingPage);
+  }
 
   res.sendFile(waitingPage);
 });
@@ -437,10 +478,6 @@ fs.watchFile("/app/config/config.json", { interval: 500 }, () => {
 //----------------------------------------------------------------
 // Main app, starts the app listening on the defined port
 //----------------------------------------------------------------
-//app.listen(PORT, () => {
-//  log(`Spinnerr Proxy running on port ${PORT}`);
-//});
-
 const server = app.listen(PORT, () => {
   log(`Spinnerr Proxy running on port ${PORT}`);
 });
