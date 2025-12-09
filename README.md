@@ -12,7 +12,8 @@ Spinnerr is a lightweight Node.js-based tool that automatically starts Docker co
 * Configurable via web UI: Optional UI to add, edit, or remove container entries and set idle timeouts.
 * Container groups: containers can be grouped to be started and stopped together.
 * Lightweight and efficient: Minimal overhead, runs as a Docker container itself.
-
+* Scheduler for containers: Automate start/stop of containers or groups based on time and day.
+  
 ## Installation
 
 The package can be pulled directly from GitHub with Docker pull or Docker Compose.
@@ -108,27 +109,43 @@ For the above example, Nginx needs to point to <host-ip>:<PORT>, where PORT is d
 
 ## Groups
 
-Containers added in Spinnerr can be grouped up in order to be stopped and started together. As long as the group is active, the timeout will override the individual container timeout. Same as containers, the idle timeout can be set to 0 in order to prevent stopping the containers after the timeout is reached (this value still overides the individual container timeout).
+Containers added in Spinnerr can be grouped up in order to be stopped and started together. As long as the group is active, the timeout will override the individual container timeout. Same as containers, the idle timeout can be set to 0 in order to prevent stopping the containers after the timeout is reached (this value still overides the individual container timeout). If a container from the group is disabled, group actions will not have any impact on it.
+
+<img width="1710" height="747" alt="image" src="https://github.com/user-attachments/assets/e45a7101-4364-4fb8-82c0-28f1c73e2883" />
+
+<img width="1709" height="758" alt="image" src="https://github.com/user-attachments/assets/d6082613-9922-460e-a0fd-8370c7ed7532" />
+
+## Scheduler
+
+You can schedule container and groups to start and stop based on time and weekdays. Multiple rules can be created to run in parallel.
+
+Do note that:
+* Container/group needs to be active in order for the scheduler to work
+* The timeout of the container/group overides the schedule, so if the idle timeout should stop the container before reaching the scheduled stop, it will
+* In order to prevent this behaviour, you can set the timeout of the conbtainer/group to 0
+* You can edit, disable or delete any of the created schedules
+
+<img width="1710" height="772" alt="image" src="https://github.com/user-attachments/assets/396e9acf-4413-49af-862b-4ff3bd90c2ca" />
 
 ## Web UI
 
 ### Dashboard
 
-<img width="1710" height="629" alt="image" src="https://github.com/user-attachments/assets/7d66700e-965b-48a2-8c41-aa8e1e343244" />
+<img width="1710" height="685" alt="image" src="https://github.com/user-attachments/assets/42f5b3bf-00aa-4266-9880-72b293c21643" />
 
-And dark mode:
+Dark mode:
 
-<img width="1710" height="674" alt="image" src="https://github.com/user-attachments/assets/5b01bab5-864a-4127-89f9-e8cd7e20b1e5" />
+<img width="1710" height="693" alt="image" src="https://github.com/user-attachments/assets/663bb04f-3a09-4c01-a099-328d56a32768" />
+
 
 ### Adding a container
 
-<img width="1710" height="750" alt="image" src="https://github.com/user-attachments/assets/02bc5dbf-1a2d-47c8-b354-7b89f9265d37" />
+<img width="1710" height="802" alt="image" src="https://github.com/user-attachments/assets/019486c1-4438-431f-8cc5-2e47b9223250" />
 
 ### Editing existing configuration
 
-<img width="1710" height="674" alt="image" src="https://github.com/user-attachments/assets/49eb74aa-e9c9-4a34-8160-eaf1567aedcd" />
+<img width="1710" height="864" alt="image" src="https://github.com/user-attachments/assets/7497f732-fd31-40d7-b164-d91524c4af5c" />
 
-<img width="1710" height="745" alt="image" src="https://github.com/user-attachments/assets/a8dd7ef3-ee01-4c35-a230-1372b6245106" />
 
 ## Variables
 
