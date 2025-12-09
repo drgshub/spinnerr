@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import containerRoutes from "./routes/containerRoutes.js"; 
 import groupRoutes from "./routes/groupRoutes.js";
+import scheduleRoutes from "./routes/scheduleRoutes.js";
 
 const app = express();
 const waitingPage = path.join("/app/public", "waiting.html");
@@ -18,7 +19,6 @@ let config;
 if (!fs.existsSync(CONFIG_PATH)) {
   // create default config
   const defaultConfig = {
-    port: 3000,
     containers: [],
     groups: []
   };
@@ -36,6 +36,7 @@ if (!fs.existsSync(CONFIG_PATH)) {
 const PORT = process.env.PORT || config.port
 let containers = config.containers;
 let groups = config.groups;
+let schedules = config.schedules || [];
 
 const lastActivity = {};
 containers.forEach(c => lastActivity[c.name] = Date.now());
@@ -270,6 +271,8 @@ function stopContainer(name) {
 //----------------------------------------------------------------
 app.use("/api/containers", express.json(), containerRoutes);
 app.use("/api/groups", express.json(), groupRoutes);
+app.use("/api/schedules", express.json(), scheduleRoutes);
+
 app.locals.startContainer = startContainer;
 app.locals.stopContainer = stopContainer;
 app.locals.isContainerRunning = isContainerRunning;
@@ -286,6 +289,7 @@ ui.use(express.json());                     // keep JSON parsing
 ui.use("/api/containers", containerRoutes); // container API routes
 ui.use(express.static("/app/public/ui"));  // serve HTML/CSS/JS
 ui.use("/api/groups", groupRoutes); // group API routes
+ui.use("/api/schedules", scheduleRoutes); // schedule API routes
 
 // Expose container control utilities to UI routes
 
@@ -369,7 +373,7 @@ app.use(async (req, res, next) => {
 
 
 //----------------------------------------------------------------
-// Tracking the timeout
+// Tracking the webrequest timeout
 //----------------------------------------------------------------
 const lastLog = {}; // track last log time per container
 
@@ -388,7 +392,7 @@ proxy.on('proxyRes', (proxyRes, req) => {
 
 
 //----------------------------------------------------------------
-// Check every 5 seconds if timeout has been reached
+// Timeout handling
 //----------------------------------------------------------------
 setInterval(() => {
   const now = Date.now();
@@ -446,6 +450,50 @@ setInterval(() => {
 
 
 //----------------------------------------------------------------
+// Schedule handling
+//----------------------------------------------------------------
+setInterval(() => {
+  const now = new Date();
+  const day = now.getDay();  
+  const time = now.toTimeString().slice(0,5);
+
+  schedules.forEach(s => {
+
+    const target = s.targetType === "container"
+      ? containers.find(c => c.name === s.target)
+      : groups.find(g => g.name === s.target);
+
+    if (!target || !target.active) return;
+
+    if (!s.timers || s.timers.length === 0) return;
+
+    s.timers.forEach(timer => {
+      if (!timer.active) return;
+
+      const dayMatch = timer.days.includes(day);
+      const startMatch = timer.startTime === time;
+      const stopMatch = timer.stopTime === time;
+
+      if (!dayMatch) return;
+
+      if (startMatch) {
+        if (s.targetType === "container") startContainer(s.target);
+        else target.container.forEach(n => startContainer(n));
+
+        log(`<${s.target}> scheduled start executed`);
+      }
+
+      if (stopMatch) {
+        if (s.targetType === "container") stopContainer(s.target);
+        else target.container.forEach(n => stopContainer(n));
+
+        log(`<${s.target}> scheduled stop executed`);
+      }
+    });
+  });
+}, 30000);
+
+//----------------------------------------------------------------
 // Reload configuration function
 //----------------------------------------------------------------
 function reloadConfig() {
@@ -461,6 +509,7 @@ function reloadConfig() {
 
     groups = newConfig.groups;
     containers = newConfig.containers;
+    schedules = newConfig.schedules;
     log("Config reloaded, containers updated");
   } catch (e) {
     log(`Failed to reload config: ${e.message}`);
