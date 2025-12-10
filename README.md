@@ -2,7 +2,7 @@
   <img width="300" height="300" alt="logo" src="https://github.com/user-attachments/assets/b648eb5d-c621-42ef-8289-382f0db171a0" />
 </p>
     
-Spinnerr is a lightweight Node.js-based tool that automatically starts Docker containers when they are accessed through a defined web route and stops them after a configurable idle timeout. Works best with Nginx Proxy Manager as a reverse proxy.
+Spinnerr is a lightweight Node.js-based service that automatically starts Docker containers when accessed through a defined web route and stops them after a configurable idle timeout or on a set schedule, either individually or as part of a group.
 
 ## Features
 
@@ -109,7 +109,9 @@ For the above example, Nginx needs to point to <host-ip>:<PORT>, where PORT is d
 
 ## Groups
 
-Containers added in Spinnerr can be grouped up in order to be stopped and started together. As long as the group is active, the timeout will override the individual container timeout. Same as containers, the idle timeout can be set to 0 in order to prevent stopping the containers after the timeout is reached (this value still overides the individual container timeout). If a container from the group is disabled, group actions will not have any impact on it.
+Containers added in Spinnerr can be grouped up in order to be stopped and started together. As long as the group is active, the timeout will override the individual container timeout. Same as containers, the idle timeout can be set to 0 in order to prevent stopping the containers after the timeout is reached (this value still overides the individual container timeout). If a container from the group is disabled, group actions will not have any impact on it. 
+
+If you need to create a group consiting of a main web application + database container or other reference container which doesn't require web access, you can set a dummy value for the reference container's internal and external host - this way the reference containers will not be started and stopped based on web requests, only as part of the group of which they are part of.
 
 <img width="1710" height="747" alt="image" src="https://github.com/user-attachments/assets/e45a7101-4364-4fb8-82c0-28f1c73e2883" />
 
@@ -117,12 +119,12 @@ Containers added in Spinnerr can be grouped up in order to be stopped and starte
 
 ## Scheduler
 
-You can schedule container and groups to start and stop based on time and weekdays. Multiple rules can be created to run in parallel.
+You can schedule containers and groups to start and stop based on time and weekdays. Multiple rules can be created to run in parallel.
 
 Do note that:
-* Container/group needs to be active in order for the scheduler to work
+* The container/group needs to be active in order for the scheduler to work
 * The timeout of the container/group overides the schedule, so if the idle timeout should stop the container before reaching the scheduled stop, it will
-* In order to prevent this behaviour, you can set the timeout of the conbtainer/group to 0
+* In order to prevent this behaviour, you can set the timeout of the container/group to 0
 * You can edit, disable or delete any of the created schedules
 
 <img width="1710" height="772" alt="image" src="https://github.com/user-attachments/assets/396e9acf-4413-49af-862b-4ff3bd90c2ca" />
