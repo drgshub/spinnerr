@@ -1,57 +1,102 @@
 {
   "containers": [
     {
-      "name": "flame",
-      "url": "http://flame:5005",
-      "idleTimeout": 30,
-      "host": "dashboard.mydomain.com",
-      "friendly_name": "Flame",
-      "active": true,
-      "activatedAt": 1764946037780
-    },
-    {
       "name": "qbittorrent",
       "url": "http://qbittorrent:9000",
-      "idleTimeout": 7200,
+      "idleTimeout": 120,
       "host": "qbit.mydomain.com",
       "friendly_name": "qBitTorrent",
       "active": true,
-      "activatedAt": 1764705929661
+      "activatedAt": null
     },
     {
       "name": "prowlarr",
       "friendly_name": "Prowlarr",
       "url": "http://prowlarr:9696",
       "host": "prowlarr.mydomain.com",
-      "idleTimeout": 6,
+      "idleTimeout": 3000,
       "active": true,
-      "activatedAt": 1764900190388
+      "activatedAt": null,
+      "idle_timeout": 3000
     },
     {
       "name": "sonarr",
       "friendly_name": "Sonarr",
-      "url": "http://sonarr:8989",
+      "url": "http://sonarr:7878",
       "host": "sonarr.mydomain.com",
-      "idleTimeout": 7,
       "active": true,
-      "activatedAt": 1764900194494
+      "activatedAt": 1765291734298,
+      "idleTimeout": 0
     },
     {
       "name": "radarr",
       "friendly_name": "Radarr",
       "url": "http://radarr:7878",
       "host": "radarr.mydomain.com",
-      "idleTimeout": 5,
+      "idleTimeout": 30,
       "active": true,
-      "activatedAt": 1764934530244
+      "activatedAt": 1766014939809
+    },
+    {
+      "name": "nodered",
+      "friendly_name": "NodeRED",
+      "url": "http://nodered:1880",
+      "host": "nodered.mydomain.com",
+      "idleTimeout": 0,
+      "active": true,
+      "activatedAt": 1766253436130,
+      "idle_timeout": 0
+    },
+    {
+      "name": "portainer",
+      "friendly_name": "Portainer",
+      "url": "https://portainer:9009",
+      "host": "portainer.mydomain.com",
+      "idleTimeout": 3600,
+      "active": true,
+      "activatedAt": 1766258522627
+    },
+    {
+      "name": "flame",
+      "friendly_name": "Flame",
+      "url": "http://flame:5000",
+      "host": "dashboard.mydomain.com",
+      "idleTimeout": 1800,
+      "active": true,
+      "activatedAt": 1766449654189,
+      "idle_timeout": 1800
+    },
+    {
+      "name": "pulsarr",
+      "friendly_name": "Pulsarr",
+      "url": "http://pulsarr:9008",
+      "host": "pulsarr.mydomain.com",
+      "idleTimeout": 0,
+      "active": true,
+      "activatedAt": 1766191549841
+    },
+    {
+      "name": "plex:100@proxmoxnode",
+      "friendly_name": "Plex",
+      "url": "https://plex:12300",
+      "host": "plex.mydomain.com",
+      "idleTimeout": 0,
+      "active": true,
+      "activatedAt": 1766271675576,
+      "running": false,
+      "idle_timeout": 0
     }
   ],
   "order": [
-    "sonarr",
+    "portainer",
+    "nodered",
     "qbittorrent",
-    "flame",
     "prowlarr",
-    "radarr"
+    "sonarr",
+    "radarr",
+    "pulsarr",
+    "flame",
+    "plex:106@proxmox"
   ],
   "groups": [
     {
@@ -59,23 +104,108 @@
         "qbittorrent",
         "prowlarr",
         "radarr",
-        "sonarr"
+        "sonarr",
+        "pulsarr"
       ],
       "name": "Media",
-      "idleTimeout": 30,
-      "active": false
-    },
-    {
-      "container": [
-        "flame"
-      ],
-      "name": "Other",
-      "idleTimeout": 0,
+      "idleTimeout": 7200,
       "active": true
     }
   ],
   "groupOrder": [
-    "Media",
-    "Other"
-  ]
+    "Media"
+  ],
+  "schedules": [
+    {
+      "target": "flame",
+      "targetType": "container",
+      "timers": [],
+      "id": "1765309098671-421"
+    },
+    {
+      "target": "Media",
+      "targetType": "group",
+      "timers": [
+        {
+          "startTime": "",
+          "stopTime": "00:00",
+          "days": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            0,
+            6
+          ],
+          "active": true
+        }
+      ],
+      "id": "1765309248681-698"
+    },
+    {
+      "target": "nodered",
+      "targetType": "container",
+      "timers": [],
+      "id": "1765316475802-7987"
+    },
+    {
+      "target": "plex:100@proxmoxnode",
+      "targetType": "container",
+      "timers": [
+        {
+          "startTime": "",
+          "stopTime": "00:00",
+          "days": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "active": true
+        }
+      ],
+      "id": "1765934978194-5158"
+    },
+    {
+      "target": "portainer",
+      "targetType": "container",
+      "timers": [],
+      "id": "1766251515240-9781"
+    },
+    {
+      "target": "Immich",
+      "targetType": "group",
+      "timers": [
+        {
+          "startTime": "",
+          "stopTime": "00:00",
+          "days": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            0,
+            6
+          ],
+          "active": true
+        }
+      ],
+      "id": "1766453016259-4282"
+    }
+  ],
+  "apiKeys": {
+    "pve": {
+      "hostname": "172.16.0.10",
+      "port": 8006,
+      "node": "proxmoxnode",
+      "user": "user@pve",
+      "tokenId": "token",
+      "token": "tokenid"
+    }
+  }
 }
